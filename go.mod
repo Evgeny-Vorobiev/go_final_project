@@ -1,4 +1,4 @@
-module go_final_project
+module github.com/Evgeny-Vorobiev/go_final_project
 
 go 1.25.6
 

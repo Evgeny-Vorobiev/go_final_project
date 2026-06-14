@@ -1,33 +1,33 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
+	"log"
 	"os"
-	"strconv"
+
+	"github.com/Evgeny-Vorobiev/go_final_project/pkg/db"
+	"github.com/Evgeny-Vorobiev/go_final_project/pkg/server"
 )
 
 func main() {
-	port := 7540
-
-	// Используем переменную окружения TODO_PORT
-	envPort := os.Getenv("TODO_PORT")
-	if envPort != "" {
-		p, err := strconv.Atoi(envPort)
-		if err == nil {
-			port = p
-		}
+	port := os.Getenv("TODO_PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	webDir := "./web"
+	// Поддержка переменной окружения TODO_DBFILE
+	dbFile := os.Getenv("TODO_DBFILE")
+	if dbFile == "" {
+		dbFile = "scheduler.db"
+	}
 
-	// Простейший файловый сервер: отдаёт всё из ./web по соответствующим путям
-	http.Handle("/", http.FileServer(http.Dir(webDir)))
+	log.Printf("using database file: %s", dbFile)
 
-	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("Server starting on %s\n", addr)
-	err := http.ListenAndServe(addr, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting server: %v\n", err)
+	if err := db.Init(dbFile); err != nil {
+		log.Fatalf("failed to init DB: %v", err)
+	}
+
+	log.Printf("starting server on port %s", port)
+	if err := server.Run(port); err != nil {
+		log.Fatalf("server error: %v", err)
 	}
 }
