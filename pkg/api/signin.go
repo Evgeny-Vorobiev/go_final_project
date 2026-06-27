@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/Evgeny-Vorobiev/go_final_project/pkg/auth"
+	_ "github.com/Evgeny-Vorobiev/go_final_project/pkg/auth"
 )
 
 type SigninRequest struct {
@@ -33,9 +34,4 @@ func SigninHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := auth.GenerateToken(req.Password)
 	sendJSON(w, SigninResponse{Token: token})
-}
-
-func sendJSON(w http.ResponseWriter, v any) {
-	b, _ := json.Marshal(v)
-	w.Write(b)
 }

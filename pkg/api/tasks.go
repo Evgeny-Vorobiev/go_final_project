@@ -19,6 +19,7 @@ type Task struct {
 	Repeat  string `json:"repeat"`
 }
 
+// sendJSON теперь только здесь (или в api.go). Если хочешь, можно перенести в api.go — главное, чтобы был ОДИН раз.
 func sendJSON(w http.ResponseWriter, v any) {
 	b, _ := json.Marshal(v)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -55,7 +56,6 @@ func buildTasksQuery(search string, limit int) (*sql.Rows, error) {
 	args := []any{limit}
 
 	if search != "" {
-		// Если похоже на дату DD.MM.YYYY
 		if len(search) == 10 && search[2] == '.' && search[5] == '.' {
 			parts := strings.Split(search, ".")
 			if len(parts) == 3 {
@@ -104,7 +104,6 @@ func TaskPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Валидация даты (формат YYYYMMDD)
 	_, err := time.Parse("20060102", task.Date)
 	if err != nil {
 		sendJSON(w, map[string]string{"error": "invalid date format, use YYYYMMDD"})
@@ -151,7 +150,7 @@ func TaskPutHandler(w http.ResponseWriter, r *http.Request) {
 func TaskDoneHandler(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		ID     int    `json:"id"`
-		Action string `json:"action"` // "delete" или "move"
+		Action string `json:"action"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		sendJSON(w, map[string]string{"error": "invalid JSON"})
@@ -163,7 +162,6 @@ func TaskDoneHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Сначала читаем задачу
 	row := db.GetDB().QueryRow(
 		"SELECT id, date, repeat FROM scheduler WHERE id=?", payload.ID,
 	)
@@ -191,9 +189,7 @@ func TaskDoneHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	defer func() { _ = tx.Rollback() }()
 
 	if payload.Action == "delete" || repeatRule == "" {
 		_, err = tx.Exec("DELETE FROM scheduler WHERE id=?", id)
@@ -202,7 +198,6 @@ func TaskDoneHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Переносим на следующую дату
 		_, err = tx.Exec("UPDATE scheduler SET date=? WHERE id=?", nextDateStr, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
