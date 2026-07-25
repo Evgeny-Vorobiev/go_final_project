@@ -4,41 +4,58 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // драйвер SQLite для database/sql
 )
 
-var db *sql.DB
-
+// schema определяет структуру таблицы scheduler и индекс по дате.
 const schema = `
 CREATE TABLE IF NOT EXISTS scheduler (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date CHAR(8) NOT NULL DEFAULT "",
-    title VARCHAR(255) NOT NULL,
-    comment TEXT,
-    repeat VARCHAR(128)
+    date CHAR(8) NOT NULL DEFAULT '',
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    repeat VARCHAR(128) NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_scheduler_date ON scheduler(date);
+CREATE INDEX IF NOT EXISTS idx_scheduler_date ON scheduler (date);
 `
 
+// Init открывает или создаёт файл базы SQLite, выполняет schema и сохраняет соединение в глобальную переменную DB.
+// Путь к файлу БД может быть переопределён через переменную окружения TODO_DBFILE.
 func Init(dbFile string) error {
-	_, err := os.Stat(dbFile)
-	install := err != nil
-
-	var errOpen error
-	db, errOpen = sql.Open("sqlite", dbFile)
-	if errOpen != nil {
-		return fmt.Errorf("failed to open DB: %w", errOpen)
+	if envPath := os.Getenv("TODO_DBFILE"); envPath != "" {
+		dbFile = envPath
 	}
 
-	if install {
-		if _, err := db.Exec(schema); err != nil {
-			return fmt.Errorf("failed to create schema: %w", err)
-		}
+	absPath, err := filepath.Abs(dbFile)
+	if err != nil {
+		return fmt.Errorf("не удалось получить абсолютный путь к БД: %w", err)
 	}
+
+	db, err := sql.Open("sqlite", absPath)
+	if err != nil {
+		return fmt.Errorf("ошибка открытия соединения: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return fmt.Errorf("ошибка пинга БД: %w", err)
+	}
+
+	if _, execErr := db.Exec(schema); execErr != nil {
+		db.Close()
+		return fmt.Errorf("ошибка выполнения схемы БД: %w", execErr)
+	}
+
+	DB = db
 	return nil
 }
 
-func GetDB() *sql.DB {
-	return db
+// Close закрывает глобальное соединение с БД.
+func Close() error {
+	if DB != nil {
+		return DB.Close()
+	}
+	return nil
 }
