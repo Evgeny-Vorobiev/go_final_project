@@ -70,7 +70,7 @@ func Tasks(limit int, search string) ([]*Task, error) {
 
 		err := rows.Scan(&id, &title, &date, &comment, &repeat)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ошибка сканирования строки: %w", err)
 		}
 
 		result = append(result, &Task{
@@ -83,7 +83,7 @@ func Tasks(limit int, search string) ([]*Task, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ошибка при обработке результатов: %w", rows.Err())
 	}
 
 	return result, nil
@@ -95,12 +95,12 @@ func AddTask(task *Task) (int64, error) {
 	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)`
 	res, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("ошибка вставки задачи: %w", err)
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("не удалось получить ID новой задачи: %w", err)
 	}
 	return id, nil
 }
@@ -180,7 +180,7 @@ func GetTask(id string) (*Task, error) {
 	task := &Task{}
 	err := row.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	if err != nil {
-		return nil, fmt.Errorf("задача не найдена")
+		return nil, fmt.Errorf("ошибка чтения задачи: %w", err)
 	}
 	return task, nil
 }
@@ -191,12 +191,12 @@ func UpdateTask(task *Task) error {
 	query := `UPDATE scheduler SET date = ?, title = ?, comment = ?, repeat = ? WHERE id = ?`
 	res, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, task.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка обновления задачи: %w", err)
 	}
 
 	count, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка получения количества изменённых строк: %w", err)
 	}
 	if count == 0 {
 		return fmt.Errorf("задача не найдена")
@@ -210,12 +210,12 @@ func DeleteTask(id string) error {
 	query := `DELETE FROM scheduler WHERE id = ?`
 	res, err := DB.Exec(query, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка удаления задачи: %w", err)
 	}
 
 	count, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка получения количества удалённых строк: %w", err)
 	}
 	if count == 0 {
 		return fmt.Errorf("задача не найдена")
