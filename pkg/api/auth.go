@@ -38,18 +38,18 @@ func signinHandler(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusNotFound, "ошибка десериализации JSON")
+		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON", err)
 		return
 	}
 
 	pass := os.Getenv("TODO_PASSWORD")
 	if pass == "" {
-		writeError(w, http.StatusNotFound, "аутентификация не настроена")
+		writeError(w, http.StatusBadRequest, "аутентификация не настроена", nil)
 		return
 	}
 
 	if req.Password != pass {
-		writeError(w, http.StatusNotFound, "Неверный пароль")
+		writeError(w, http.StatusUnauthorized, "Неверный пароль", nil)
 		return
 	}
 
@@ -63,7 +63,7 @@ func signinHandler(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
-		writeError(w, http.StatusNotFound, "ошибка формирования токена")
+		writeError(w, http.StatusInternalServerError, "ошибка формирования токена", err)
 		return
 	}
 

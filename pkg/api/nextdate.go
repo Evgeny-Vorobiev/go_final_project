@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strconv"
@@ -35,7 +34,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 	case "m":
 		return nextMonthDay(start, now, parts)
 	default:
-		return "", nil
+		return "", fmt.Errorf("недопустимое правило повторения")
 	}
 }
 
@@ -224,27 +223,28 @@ func handleNextDate(w http.ResponseWriter, r *http.Request) {
 
 	var now time.Time
 	var err error
+
 	if nowStr == "" {
 		now = time.Now()
 	} else {
 		now, err = time.Parse(dateFormat, nowStr)
 		if err != nil {
-			log.Printf("Invalid 'now' parameter: %v", err)
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("параметр now имеет неверный формат: %s", err.Error()))
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(""))
+			writeError(w, http.StatusBadRequest, "неверный формат параметра now", err)
 			return
 		}
 	}
 
-	next, _ := NextDate(now, dateStr, repeat)
-	if next == "" {
-		log.Printf("NextDate error: %v", err)
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("не удалось вычислить следующую дату: %s", err.Error()))
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(""))
+	next, err := NextDate(now, dateStr, repeat)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "ошибка вычисления даты", err)
 		return
 	}
+
+	if next == "" {
+		writeError(w, http.StatusBadRequest, "не удалось вычислить следующую дату", nil)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(next))
 }

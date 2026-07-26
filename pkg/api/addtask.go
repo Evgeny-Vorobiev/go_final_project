@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -26,8 +25,15 @@ func writeJSON(w http.ResponseWriter, statusCode int, data any) {
 
 // writeError отправляет клиенту JSON с сообщением об ошибке и корректным HTTP-кодом.
 // Логирует сообщение, чтобы было проще исправлять ошибки.
-func writeError(w http.ResponseWriter, statusCode int, msg string) {
-	log.Printf("API error (status=%d): %s", statusCode, msg)
+func writeError(w http.ResponseWriter, statusCode int, msg string, err error) {
+	// Сохраняем оригинальное сообщение об ошибке в лог
+	if err != nil {
+		log.Printf("API error (status=%d): %s - %v", statusCode, msg, err)
+	} else {
+		log.Printf("API error (status=%d): %s", statusCode, msg)
+	}
+
+	// Отправляем клиенту только пользовательское сообщение
 	writeJSON(w, statusCode, map[string]string{"error": msg})
 }
 
@@ -43,12 +49,12 @@ func truncateToDate(t time.Time) time.Time {
 func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var task db.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON")
+		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON", err)
 		return
 	}
 
 	if task.Title == "" {
-		writeError(w, http.StatusBadRequest, "не указан заголовок задачи")
+		writeError(w, http.StatusBadRequest, "не указан заголовок задачи", nil)
 		return
 	}
 
@@ -62,7 +68,7 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 		// Пытаемся распарсить дату
 		t, err := time.Parse(dateFormat, task.Date)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "дата указана в неверном формате")
+			writeError(w, http.StatusBadRequest, "дата указана в неверном формате", err)
 			return
 		}
 		t = truncateToDate(t)
@@ -76,7 +82,7 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 				// С повтором — вычисляем следующую дату по правилу
 				next, err := NextDate(now, task.Date, task.Repeat)
 				if err != nil || next == "" {
-					writeError(w, http.StatusBadRequest, "недопустимое правило повторения")
+					writeError(w, http.StatusBadRequest, "недопустимое правило повторения", err)
 					return
 				}
 				task.Date = next
@@ -89,14 +95,14 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 	if task.Repeat != "" {
 		result, err := NextDate(now, task.Date, task.Repeat)
 		if err != nil || result == "" {
-			writeError(w, http.StatusBadRequest, "недопустимое правило повторения")
+			writeError(w, http.StatusBadRequest, "недопустимое правило повторения", err)
 			return
 		}
 	}
 
 	id, err := db.AddTask(&task)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "ошибка добавления задачи в базу данных")
+		writeError(w, http.StatusInternalServerError, "ошибка добавления задачи в базу данных", err)
 		return
 	}
 
@@ -107,13 +113,13 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Не указан идентификатор")
+		writeError(w, http.StatusBadRequest, "Не указан идентификатор", nil)
 		return
 	}
 
 	task, err := db.GetTask(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "Задача не найдена")
+		writeError(w, http.StatusNotFound, "Задача не найдена", err)
 		return
 	}
 
@@ -131,24 +137,24 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON")
+		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON", err)
 		return
 	}
 
 	if task.ID == "" {
-		writeError(w, http.StatusBadRequest, "Не указан идентификатор")
+		writeError(w, http.StatusBadRequest, "Не указан идентификатор", nil)
 		return
 	}
 	if task.Title == "" {
-		writeError(w, http.StatusBadRequest, "не указан заголовок задачи")
+		writeError(w, http.StatusBadRequest, "не указан заголовок задачи", nil)
 		return
 	}
 	if task.Date == "" {
-		writeError(w, http.StatusBadRequest, "не указана дата")
+		writeError(w, http.StatusBadRequest, "не указана дата", nil)
 		return
 	}
 	if _, err := time.Parse(dateFormat, task.Date); err != nil {
-		writeError(w, http.StatusBadRequest, "дата указана в неверном формате")
+		writeError(w, http.StatusBadRequest, "дата указана в неверном формате", err)
 		return
 	}
 
@@ -157,7 +163,7 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		result, err := NextDate(now, task.Date, task.Repeat)
 		if err != nil || result == "" {
-			writeError(w, http.StatusBadRequest, "недопустимое правило повторения")
+			writeError(w, http.StatusBadRequest, "недопустимое правило повторения", err)
 			return
 		}
 	}
@@ -169,7 +175,7 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		Comment: task.Comment,
 		Repeat:  task.Repeat,
 	}); err != nil {
-		writeError(w, http.StatusNotFound, "Задача не найдена")
+		writeError(w, http.StatusNotFound, "Задача не найдена", err)
 		return
 	}
 
@@ -182,21 +188,20 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 func handleDoneTask(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Не указан идентификатор")
+		writeError(w, http.StatusBadRequest, "Не указан идентификатор", nil)
 		return
 	}
 
 	task, err := db.GetTask(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "Задача не найдена")
+		writeError(w, http.StatusNotFound, "Задача не найдена", err)
 		return
 	}
 
 	if task.Repeat == "" {
 		// Одноразовая задача — удаляем
 		if err := db.DeleteTask(id); err != nil {
-			log.Printf("DB error in handleDoneTask (delete): %v", err)
-			writeError(w, http.StatusInternalServerError, "Ошибка при удалении задачи")
+			writeError(w, http.StatusInternalServerError, "Ошибка при удалении задачи", err)
 			return
 		}
 		// Успешно удалили — возвращаем 200 OK
@@ -207,12 +212,11 @@ func handleDoneTask(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		nextDate, err := NextDate(now, task.Date, task.Repeat)
 		if err != nil || nextDate == "" {
-			log.Printf("NextDate error in handleDoneTask: %v", err)
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("не удалось вычислить следующую дату: %s", err.Error()))
+			writeError(w, http.StatusBadRequest, "Не удалось вычислить следующую дату", err)
 			return
 		}
 		if err := db.UpdateDate(nextDate, id); err != nil {
-			writeError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи")
+			writeError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи", err)
 			return
 		}
 	}
@@ -224,18 +228,18 @@ func handleDoneTask(w http.ResponseWriter, r *http.Request) {
 func handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Не указан идентификатор")
+		writeError(w, http.StatusBadRequest, "Не указан идентификатор", nil)
 		return
 	}
 
 	// Проверка существования задачи перед удалением (чтобы вернуть понятную ошибку)
 	if _, err := db.GetTask(id); err != nil {
-		writeError(w, http.StatusNotFound, "Задача не найдена")
+		writeError(w, http.StatusNotFound, "Задача не найдена", err)
 		return
 	}
 
 	if err := db.DeleteTask(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Ошибка при удалении задачи")
+		writeError(w, http.StatusInternalServerError, "Ошибка при удалении задачи", err)
 		return
 	}
 
