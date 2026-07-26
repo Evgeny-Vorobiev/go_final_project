@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -37,18 +38,18 @@ func signinHandler(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, "ошибка десериализации JSON")
+		writeError(w, http.StatusBadRequest, "ошибка десериализации JSON", err)
 		return
 	}
 
 	pass := os.Getenv("TODO_PASSWORD")
 	if pass == "" {
-		writeError(w, "аутентификация не настроена")
+		writeError(w, http.StatusBadRequest, "аутентификация не настроена", nil)
 		return
 	}
 
 	if req.Password != pass {
-		writeError(w, "Неверный пароль")
+		writeError(w, http.StatusUnauthorized, "Неверный пароль", nil)
 		return
 	}
 
@@ -62,11 +63,11 @@ func signinHandler(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
-		writeError(w, "ошибка формирования токена")
+		writeError(w, http.StatusInternalServerError, "ошибка формирования токена", err)
 		return
 	}
 
-	writeJSON(w, map[string]string{"token": tokenString})
+	writeJSON(w, http.StatusOK, map[string]string{"token": tokenString})
 }
 
 // auth — middleware для проверки JWT-аутентификации.
@@ -100,12 +101,14 @@ func auth(next http.HandlerFunc) http.HandlerFunc {
 			return []byte(secretKey), nil
 		})
 		if err != nil {
+			log.Printf("Auth error: %v", err)
 			http.Error(w, "Authentification required", http.StatusUnauthorized)
 			return
 		}
 
 		cl, ok := parsedToken.Claims.(*claims)
 		if !ok || !parsedToken.Valid || cl.PasswordHash != expectedHash {
+			log.Printf("Auth failed: invalid token or password hash mismatch")
 			http.Error(w, "Authentification required", http.StatusUnauthorized)
 			return
 		}
